@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,9 +20,8 @@ type Fetchresult struct {
 	login    bool
 }
 
-func main() {
-	url := "http://jana.berlin"
-
+//parse returns *goquery documents
+func parse(url string) (*goquery.Document, error) {
 	res, err := http.Get(url)
 	if err != nil {
 		log.Fatal(err)
@@ -38,6 +38,16 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading HTTP response body ", err)
 	}
+	return doc, nil
+}
+
+func main() {
+	// url := "http://jana.berlin"
+	url := "http://symbolic.com/"
+	doc, err := parse(url)
+	if err != nil {
+		return
+	}
 	if doc == nil {
 		return
 	}
@@ -51,12 +61,45 @@ func main() {
 	title := doc.Find("title").Contents().Text()
 	fmt.Println("Title: ", title)
 
+	hs := getHeadings(doc)
+	fmt.Println("headings:", hs)
+
 	urls := getURL(doc)
 	fmt.Println("URLS:", urls)
+
+	//make channels
+	c := make(chan string)
+
+	//checkLinks concurrently
+	for _, u := range urls {
+		go checkLink(u, c)
+	}
+
+	// receive inaccessible links from channel
+	ia := []string{}
+	for l := range c {
+		ia = append(ia, l)
+	}
+	fmt.Println("inaccessible links", ia)
 
 	//internal/external and in/accessible loop
 	il := countIl(url, urls)
 	fmt.Println("count internal urls: ", il)
+
+}
+
+// Find all headings H1-H6
+// todo: return map with H*: count
+func getHeadings(doc *goquery.Document) []string {
+	hs := []string{}
+	for i := 1; i <= 6; i++ {
+		str := strconv.Itoa(i)
+		doc.Find("h" + str).Each(func(i int, s *goquery.Selection) {
+			// fmt.Println(s.Text())
+			hs = append(hs, s.Text())
+		})
+	}
+	return hs
 }
 
 //countIl counts the internal links found on site
@@ -81,7 +124,7 @@ func checkLink(link string, c chan string) {
 		c <- link //send to channel
 		return
 	}
-	fmt.Println(link, "is up")
+	// fmt.Println(link, "is up")
 	// c <- link
 	time.Sleep(3 * time.Second)
 	close(c)
