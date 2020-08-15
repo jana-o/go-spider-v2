@@ -11,12 +11,12 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-//Fetchresult is
-type Fetchresult struct {
+//fetchResult is
+type fetchResult struct {
 	version  string
 	title    string
+	headings map[string]int
 	urls     []string
-	headings []string
 	login    bool
 }
 
@@ -42,8 +42,13 @@ func parse(url string) (*goquery.Document, error) {
 }
 
 func main() {
-	// url := "http://jana.berlin"
 	url := "http://symbolic.com/"
+
+	// url := os.Args[1]
+	// if url == "" {
+	// 	os.Exit(1)
+	// }
+
 	doc, err := parse(url)
 	if err != nil {
 		return
@@ -52,26 +57,14 @@ func main() {
 		return
 	}
 
-	version, err := versionReader(doc)
-	if err != nil {
-		fmt.Println("Error loading version", err)
-	}
-	fmt.Println("version: ", version)
-
-	title := doc.Find("title").Contents().Text()
-	fmt.Println("Title: ", title)
-
-	hs := getHeadings(doc)
-	fmt.Println("headings:", hs)
-
-	urls := getURL(doc)
-	fmt.Println("URLS:", urls)
+	fresult := fetch(doc)
+	fmt.Println("FR", fresult)
 
 	//make channels
 	c := make(chan string)
 
 	//checkLinks concurrently
-	for _, u := range urls {
+	for _, u := range fresult.urls {
 		go checkLink(u, c)
 	}
 
@@ -83,45 +76,26 @@ func main() {
 	fmt.Println("inaccessible links", ia)
 
 	//internal/external and in/accessible loop
-	il := countIl(url, urls)
+	il := countIl(url, fresult.urls)
 	fmt.Println("count internal urls: ", il)
 
+}
+
+func fetch(doc *goquery.Document) fetchResult {
+	fr := fetchResult{}
+
+	v, err := versionReader(doc)
+	if err != nil {
+		fmt.Println("Error loading version", err)
+	}
+	fr.version = v
+	fr.title = doc.Find("title").Contents().Text()
+	fr.headings = getHeadings(doc)
+	fr.urls = getURL(doc)
+
 	// findForm(doc)
-}
 
-// getHeadings finds all headings H1-H6 and returns map of headings count by level
-func getHeadings(doc *goquery.Document) map[string]int {
-	hs := map[string]int{
-		"1": 0,
-		"2": 0,
-		"3": 0,
-		"4": 0,
-		"5": 0,
-		"6": 0,
-	}
-	for i := 1; i <= 6; i++ {
-		str := strconv.Itoa(i)
-		doc.Find("h" + str).Each(func(i int, s *goquery.Selection) {
-			hs[str] = +1
-			// fmt.Println(headings)
-		})
-	}
-	// fmt.Println(hs)
-	return hs
-}
-
-//countIl counts the internal links found on site
-func countIl(baseURL string, urls []string) int {
-	il := 0
-	for _, u := range urls {
-		if strings.HasPrefix(u, baseURL) {
-			il++
-		}
-		if strings.HasPrefix(u, "/") {
-			il++
-		}
-	}
-	return il
+	return fr
 }
 
 //checkLink checks if link is accessible
@@ -138,6 +112,41 @@ func checkLink(link string, c chan string) {
 	close(c)
 }
 
+//countIl counts the internal links found on site
+func countIl(baseURL string, urls []string) int {
+	il := 0
+	for _, u := range urls {
+		if strings.HasPrefix(u, baseURL) {
+			il++
+		}
+		if strings.HasPrefix(u, "/") {
+			il++
+		}
+	}
+	return il
+}
+
+// getHeadings finds all headings H1-H6 and returns map of headings count by level
+func getHeadings(doc *goquery.Document) map[string]int {
+	hs := map[string]int{
+		"h1": 0,
+		"h2": 0,
+		"h3": 0,
+		"h4": 0,
+		"h5": 0,
+		"h6": 0,
+	}
+	for i := 1; i <= 6; i++ {
+		str := strconv.Itoa(i)
+		doc.Find("h" + str).Each(func(i int, s *goquery.Selection) {
+			hs["h"+str] = +1
+			// fmt.Println(headings)
+		})
+	}
+	// fmt.Println(hs)
+	return hs
+}
+
 // Called for each HTML element found
 func getURL(doc *goquery.Document) []string {
 	foundUrls := []string{}
@@ -148,7 +157,7 @@ func getURL(doc *goquery.Document) []string {
 	return foundUrls
 }
 
-//helper func checks HTML version and returns first match
+//checks HTML version and returns first match
 func versionReader(doc *goquery.Document) (string, error) {
 	var doctypes = map[string]string{
 		"HTML 5":                 `<!DOCTYPE html>`,
