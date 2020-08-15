@@ -86,19 +86,27 @@ func main() {
 	il := countIl(url, urls)
 	fmt.Println("count internal urls: ", il)
 
+	// findForm(doc)
 }
 
-// Find all headings H1-H6
-// todo: return map with H*: count
-func getHeadings(doc *goquery.Document) []string {
-	hs := []string{}
+// getHeadings finds all headings H1-H6 and returns map of headings count by level
+func getHeadings(doc *goquery.Document) map[string]int {
+	hs := map[string]int{
+		"1": 0,
+		"2": 0,
+		"3": 0,
+		"4": 0,
+		"5": 0,
+		"6": 0,
+	}
 	for i := 1; i <= 6; i++ {
 		str := strconv.Itoa(i)
 		doc.Find("h" + str).Each(func(i int, s *goquery.Selection) {
-			// fmt.Println(s.Text())
-			hs = append(hs, s.Text())
+			hs[str] = +1
+			// fmt.Println(headings)
 		})
 	}
+	// fmt.Println(hs)
 	return hs
 }
 
@@ -164,4 +172,19 @@ func versionReader(doc *goquery.Document) (string, error) {
 		}
 	}
 	return version, nil
+}
+
+// TODO
+//findForm checks if page contains a login form
+func findForm(doc *goquery.Document) bool {
+	fmt.Println("Hello")
+	//find "form" _ children
+	// "login" class, value, submit
+	doc.Find("form").Each(func(i int, s *goquery.Selection) {
+		l, _ := s.Attr("value")
+		if l == "login" || l == "Login" {
+			return
+		}
+	})
+	return false
 }
