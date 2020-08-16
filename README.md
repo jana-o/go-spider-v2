@@ -1,4 +1,4 @@
-# . 
+# Go-web 
 
 Web application which takes a website URL as an input and provides general information about the contents of the page:
 - HTML Version
@@ -9,4 +9,14 @@ Web application which takes a website URL as an input and provides general infor
 - If a page contains a login form
 
 
-Run the application: go run main.go
+## Run the application: 
+Run the app with: 
+```
+go run main.go
+```
+
+Run tests with:
+``` 
+go test
+```
+
