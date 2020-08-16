@@ -4,24 +4,29 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-//fetchResult is
+//fetchResult contains information found on website
 type fetchResult struct {
 	version  string
 	title    string
 	headings map[string]int
 	urls     []string
 }
+type sortResult struct {
+	internals    int
+	inaccessible int
+	login        bool
+}
 
-//parse returns *goquery documents
-func parse(url string) (*goquery.Document, error) {
+//parsePage returns *goquery documents
+func parsePage(url string) (*goquery.Document, error) {
 	res, err := http.Get(url)
 	if err != nil {
 		log.Fatal(err)
@@ -33,7 +38,7 @@ func parse(url string) (*goquery.Document, error) {
 		log.Fatalf("Error response status code was %d", res.StatusCode)
 	}
 
-	// Create a goquery document from the HTTP response
+	//create a goquery document from the HTTP response
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		log.Fatal("Error loading HTTP response body ", err)
@@ -42,80 +47,92 @@ func parse(url string) (*goquery.Document, error) {
 }
 
 func main() {
-	// baseURL := "http://symbolic.com/"
-	baseURL := os.Args[1]
-	if baseURL == "" {
+	inputURL := os.Args[1]
+	if inputURL == "" {
 		log.Fatalln("missing url")
 	}
 
-	doc, err := parse(baseURL)
+	doc, err := parsePage(inputURL)
 	if err != nil || doc == nil {
 		return
 	}
-
 	//collect fetchResult from site
 	fresult := fetch(doc)
-	fmt.Println("FetchResult", fresult)
 
-	//analyse urls found
-	//findinternals finds internal links
+	//sort urls
+	sresult := sortLinks(fresult.urls, inputURL)
+
+	display(fresult, sresult)
+}
+
+//sortLinks finds subsets of links
+func sortLinks(fresult []string, inputURL string) *sortResult {
+	r := &sortResult{}
+
+	parsed, err := url.Parse(inputURL)
+	if err != nil {
+		panic(err)
+	}
+	baseURL := parsed.Scheme + "://" + parsed.Host
+
+	// find internal links
 	findinternals := func(s string) bool {
 		return strings.HasPrefix(s, baseURL) || strings.HasPrefix(s, "/") || strings.HasPrefix(s, "#")
 	}
-	internals := Filter(fresult.urls, findinternals)
-	fmt.Printf("found %d internal links and %d external \n", len(internals), len(fresult.urls)-len(internals))
+	internals := filter(fresult, findinternals)
+	r.internals = len(internals)
 
-	//containsLoginByURL checks if internal links contain login (could be done with regex as well)
+	//check if internal links contain login (could be done with regex as well)
 	containsLoginByURL := func(il string) bool {
 		s := strings.ToUpper(il)
 		return strings.Contains(s, "LOGIN") || strings.Contains(s, "SIGNIN")
 	}
-	login := Filter(internals, containsLoginByURL)
+	login := filter(internals, containsLoginByURL)
 	if len(login) == 0 {
-		fmt.Println("no login found")
+		r.login = false //do SearchForm(doc)
 	} else {
-		fmt.Printf("found %d login links\n", len(login))
+		r.login = true
 	}
 
-	// make channel
+	// create unbuffered channel to receive
 	c := make(chan string)
 
-	//pingLinks concurrently
-	for _, u := range fresult.urls {
+	//checkLinks concurrently; filter pinglink was very slow
+	for _, u := range fresult {
 		go pingLink(u, c)
 	}
+
 	// receive inaccessible links from channel
-	ia := []string{}
-	for l := range c {
-		ia = append(ia, l)
+	ias := []string{}
+	for ia := range c {
+		ias = append(ias, ia)
 	}
-	fmt.Printf("found %d inaccessible links", len(ia))
+	r.inaccessible = len(ias)
 
-}
-
-//Filter finds internal links
-func Filter(ss []string, f func(string) bool) (filtered []string) {
-	for _, s := range ss {
-		if f(s) {
-			filtered = append(filtered, s)
-		}
-	}
-	return
+	return r
 }
 
 //pingLink checks if link is accessible and sends inaccessible links to channel
 func pingLink(link string, c chan string) {
 	_, err := http.Get(link)
 	if err != nil {
-		// fmt.Println(link, "down")
-		c <- link //send to channel
+		c <- link //send to channel, link is down
 		return
 	}
-	time.Sleep(5 * time.Second)
 	close(c)
 }
 
-//fetch finds elements on website and returns a fetchresult
+//filter finds sublist of links
+func filter(ss []string, f func(string) bool) (filtered []string) {
+	for _, s := range ss {
+		if f(s) {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
+}
+
+//fetch finds elements on website and returns a fetchResult
 func fetch(doc *goquery.Document) *fetchResult {
 	fr := fetchResult{}
 
@@ -156,7 +173,7 @@ func getURLs(doc *goquery.Document) []string {
 	foundUrls := []string{}
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
 		u, _ := s.Attr("href")
-		if !Contains(foundUrls, u) {
+		if !contains(foundUrls, u) {
 			foundUrls = append(foundUrls, u)
 		}
 	})
@@ -164,7 +181,7 @@ func getURLs(doc *goquery.Document) []string {
 }
 
 //Contains returns true if slice already contains url
-func Contains(urls []string, url string) bool {
+func contains(urls []string, url string) bool {
 	for _, v := range urls {
 		if v == url {
 			return true
@@ -173,7 +190,7 @@ func Contains(urls []string, url string) bool {
 	return false
 }
 
-//checks HTML version and returns first match
+//versionReader finds HTML version and returns first match
 func versionReader(doc *goquery.Document) (string, error) {
 	doctypes := map[string]string{
 		"HTML 5":                 `<!DOCTYPE html>`,
@@ -197,4 +214,26 @@ func versionReader(doc *goquery.Document) (string, error) {
 		}
 	}
 	return version, nil
+}
+
+// search doc for form. Inside form I look for an input of type or id password
+// I assume that that the user needs to input a password because there are too many labels for name/username/email etc.
+// May have to look for oauth aus well
+func searchForm(doc *goquery.Document) bool {
+	doc.Find(".form").Each(func(i int, s *goquery.Selection) {
+		form := s.Find("#Password").Text()
+		fmt.Println("form", form)
+	})
+	return true
+}
+
+//displays results
+func display(fr *fetchResult, r *sortResult) {
+	fmt.Printf("Website title: %s \nHTML version: %s\nHeadings count by level:\n", fr.title, fr.version)
+	for k, v := range fr.headings {
+		fmt.Printf("%d - %s\n", v, k)
+	}
+
+	fmt.Printf("Amount of internal links: %d\namount of innaccessible links: %d\n", r.internals, r.inaccessible)
+	fmt.Printf("Contains login is: %t", r.login)
 }
