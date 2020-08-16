@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-//fetchResult is
+//fetchResult contains information found on website, we need to process urls
 type fetchResult struct {
 	version  string
 	title    string
@@ -20,8 +20,8 @@ type fetchResult struct {
 	urls     []string
 }
 
-//parse returns *goquery documents
-func parse(url string) (*goquery.Document, error) {
+//parsePage returns *goquery documents
+func parsePage(url string) (*goquery.Document, error) {
 	res, err := http.Get(url)
 	if err != nil {
 		log.Fatal(err)
@@ -33,7 +33,7 @@ func parse(url string) (*goquery.Document, error) {
 		log.Fatalf("Error response status code was %d", res.StatusCode)
 	}
 
-	// Create a goquery document from the HTTP response
+	//create a goquery document from the HTTP response
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		log.Fatal("Error loading HTTP response body ", err)
@@ -42,58 +42,59 @@ func parse(url string) (*goquery.Document, error) {
 }
 
 func main() {
-	// baseURL := "http://symbolic.com/"
-	baseURL := os.Args[1]
-	if baseURL == "" {
+	inputURL := os.Args[1]
+	if inputURL == "" {
 		log.Fatalln("missing url")
 	}
 
-	doc, err := parse(baseURL)
+	doc, err := parsePage(inputURL)
 	if err != nil || doc == nil {
 		return
 	}
-
 	//collect fetchResult from site
 	fresult := fetch(doc)
-	fmt.Println("FetchResult", fresult)
+	fmt.Printf("website title: %s \nwith HTML version %s\n", fresult.title, fresult.version)
+	fmt.Println("headings:", fresult.headings)
 
-	//analyse urls found
-	//findinternals finds internal links
+	//analyse urls from fresult
+	parsed, err := url.Parse(inputURL)
+	if err != nil {
+		panic(err)
+	}
+	baseURL := parsed.Scheme + "://" + parsed.Host
+
+	//find internal links
 	findinternals := func(s string) bool {
 		return strings.HasPrefix(s, baseURL) || strings.HasPrefix(s, "/") || strings.HasPrefix(s, "#")
 	}
 	internals := Filter(fresult.urls, findinternals)
-	fmt.Printf("found %d internal links and %d external \n", len(internals), len(fresult.urls)-len(internals))
+	fmt.Printf("found %d internal links and %d external links \n", len(internals), len(fresult.urls)-len(internals))
 
-	//containsLoginByURL checks if internal links contain login (could be done with regex as well)
+	//check if link is inaccessible
+	pingLink := func(link string) bool {
+		_, err := http.Get(link)
+		if err != nil {
+			return true
+		}
+		return false
+	}
+	inaccessible := Filter(internals, pingLink)
+	fmt.Printf("found %d inaccessible links\n", len(inaccessible))
+
+	//check if internal links contain login (could be done with regex as well)
 	containsLoginByURL := func(il string) bool {
 		s := strings.ToUpper(il)
 		return strings.Contains(s, "LOGIN") || strings.Contains(s, "SIGNIN")
 	}
 	login := Filter(internals, containsLoginByURL)
 	if len(login) == 0 {
-		fmt.Println("no login found")
+		fmt.Println("no login link found")
 	} else {
 		fmt.Printf("found %d login links\n", len(login))
 	}
-
-	// make channel
-	c := make(chan string)
-
-	//pingLinks concurrently
-	for _, u := range fresult.urls {
-		go pingLink(u, c)
-	}
-	// receive inaccessible links from channel
-	ia := []string{}
-	for l := range c {
-		ia = append(ia, l)
-	}
-	fmt.Printf("found %d inaccessible links", len(ia))
-
 }
 
-//Filter finds internal links
+//Filter finds sublist of links
 func Filter(ss []string, f func(string) bool) (filtered []string) {
 	for _, s := range ss {
 		if f(s) {
@@ -103,19 +104,7 @@ func Filter(ss []string, f func(string) bool) (filtered []string) {
 	return
 }
 
-//pingLink checks if link is accessible and sends inaccessible links to channel
-func pingLink(link string, c chan string) {
-	_, err := http.Get(link)
-	if err != nil {
-		// fmt.Println(link, "down")
-		c <- link //send to channel
-		return
-	}
-	time.Sleep(5 * time.Second)
-	close(c)
-}
-
-//fetch finds elements on website and returns a fetchresult
+//fetch finds elements on website and returns a fetchResult
 func fetch(doc *goquery.Document) *fetchResult {
 	fr := fetchResult{}
 
@@ -173,7 +162,7 @@ func Contains(urls []string, url string) bool {
 	return false
 }
 
-//checks HTML version and returns first match
+//versionReader finds HTML version and returns first match
 func versionReader(doc *goquery.Document) (string, error) {
 	doctypes := map[string]string{
 		"HTML 5":                 `<!DOCTYPE html>`,
