@@ -12,12 +12,17 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-//fetchResult contains information found on website, we need to process urls
 type fetchResult struct {
 	version  string
 	title    string
 	headings map[string]int
 	urls     []string
+}
+
+type sortResult struct {
+	internals    int
+	inaccessible int
+	login        bool
 }
 
 //parsePage returns *goquery documents
@@ -67,7 +72,7 @@ func main() {
 	findinternals := func(s string) bool {
 		return strings.HasPrefix(s, baseURL) || strings.HasPrefix(s, "/") || strings.HasPrefix(s, "#")
 	}
-	internals := Filter(fresult.urls, findinternals)
+	internals := filter(fresult.urls, findinternals)
 	fmt.Printf("found %d internal links and %d external links \n", len(internals), len(fresult.urls)-len(internals))
 
 	//check if link is inaccessible
@@ -78,7 +83,7 @@ func main() {
 		}
 		return false
 	}
-	inaccessible := Filter(internals, pingLink)
+	inaccessible := filter(internals, pingLink)
 	fmt.Printf("found %d inaccessible links\n", len(inaccessible))
 
 	//check if internal links contain login (could be done with regex as well)
@@ -86,16 +91,16 @@ func main() {
 		s := strings.ToUpper(il)
 		return strings.Contains(s, "LOGIN") || strings.Contains(s, "SIGNIN")
 	}
-	login := Filter(internals, containsLoginByURL)
+	login := filter(internals, containsLoginByURL)
 	if len(login) == 0 {
 		fmt.Println("no login link found")
 	} else {
-		fmt.Printf("found %d login links\n", len(login))
+		fmt.Println("login link found")
 	}
 }
 
-//Filter finds sublist of links
-func Filter(ss []string, f func(string) bool) (filtered []string) {
+//filter finds sublist of links
+func filter(ss []string, f func(string) bool) (filtered []string) {
 	for _, s := range ss {
 		if f(s) {
 			filtered = append(filtered, s)
@@ -145,7 +150,7 @@ func getURLs(doc *goquery.Document) []string {
 	foundUrls := []string{}
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
 		u, _ := s.Attr("href")
-		if !Contains(foundUrls, u) {
+		if !contains(foundUrls, u) {
 			foundUrls = append(foundUrls, u)
 		}
 	})
@@ -153,7 +158,7 @@ func getURLs(doc *goquery.Document) []string {
 }
 
 //Contains returns true if slice already contains url
-func Contains(urls []string, url string) bool {
+func contains(urls []string, url string) bool {
 	for _, v := range urls {
 		if v == url {
 			return true
@@ -186,4 +191,26 @@ func versionReader(doc *goquery.Document) (string, error) {
 		}
 	}
 	return version, nil
+}
+
+// search doc for form. Inside form I look for an input of type or id password
+// I assume that that the user needs to input a password because there are too many labels for name/username/email etc.
+// May have to look for oauth aus well
+func searchForm(doc *goquery.Document) bool {
+	doc.Find(".form").Each(func(i int, s *goquery.Selection) {
+		form := s.Find("#Password").Text()
+		fmt.Println("form", form)
+	})
+	return true
+}
+
+//displays results
+func display(fr *fetchResult, r *sortResult) {
+	fmt.Printf("Website title: %s \nHTML version: %s\nHeadings count by level:\n", fr.title, fr.version)
+	for k, v := range fr.headings {
+		fmt.Printf("%d - %s\n", v, k)
+	}
+
+	fmt.Printf("Amount of internal links: %d\namount of innaccessible links: %d\n", r.internals, r.inaccessible)
+	fmt.Printf("Contains login is: %t", r.login)
 }
