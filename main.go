@@ -19,6 +19,7 @@ type fetchResult struct {
 	headings map[string]int
 	urls     []string
 }
+
 type sortResult struct {
 	internals    int
 	inaccessible int
@@ -81,6 +82,18 @@ func sortLinks(fresult []string, inputURL string) *sortResult {
 	}
 	internals := filter(fresult, findinternals)
 	r.internals = len(internals)
+	fmt.Printf("found %d internal links and %d\n", r.internals, len(fresult)-r.internals)
+
+	//check if link is inaccessible //change Get(input) like in v2
+	pingLink := func(link string) bool {
+		_, err := http.Get(link)
+		if err != nil {
+			return true
+		}
+		return false
+	}
+	inaccessible := filter(internals, pingLink)
+	fmt.Printf("found %d inaccessible links\n", len(inaccessible))
 
 	//check if internal links contain login (could be done with regex as well)
 	containsLoginByURL := func(il string) bool {
@@ -94,32 +107,7 @@ func sortLinks(fresult []string, inputURL string) *sortResult {
 		r.login = true
 	}
 
-	// create unbuffered channel to receive
-	c := make(chan string)
-
-	//checkLinks concurrently; filter pinglink was very slow
-	for _, u := range fresult {
-		go pingLink(u, c)
-	}
-
-	// receive inaccessible links from channel
-	ias := []string{}
-	for ia := range c {
-		ias = append(ias, ia)
-	}
-	r.inaccessible = len(ias)
-
 	return r
-}
-
-//pingLink checks if link is accessible and sends inaccessible links to channel
-func pingLink(link string, c chan string) {
-	_, err := http.Get(link)
-	if err != nil {
-		c <- link //send to channel, link is down
-		return
-	}
-	close(c)
 }
 
 //filter finds sublist of links
@@ -202,7 +190,7 @@ func versionReader(doc *goquery.Document) (string, error) {
 		"XHTML 1.0 Frameset":     `"-//W3C//DTD XHTML 1.0 Frameset//EN"`,
 		"XHTML 1.1":              `"-//W3C//DTD XHTML 1.1//EN"`,
 	}
-	//e.g. http://symbolic.com/  =>  XHTML 1.0 Transitional
+
 	html, err := doc.Html()
 	if err != nil {
 		return "", err
@@ -233,7 +221,5 @@ func display(fr *fetchResult, r *sortResult) {
 	for k, v := range fr.headings {
 		fmt.Printf("%d - %s\n", v, k)
 	}
-
-	fmt.Printf("Amount of internal links: %d\namount of innaccessible links: %d\n", r.internals, r.inaccessible)
 	fmt.Printf("Contains login is: %t", r.login)
 }

@@ -29,3 +29,4 @@ Instead of using Goquery I tried the "golang.org/x/net/html" and its tokenizer. 
 - Analysed the urls[] with strings but could use regex
 - Atm the fetchResult excludes duplicates
 - What I would change: create a Matcher interface and improve error handling
+- slow
