@@ -26,6 +26,7 @@ In addition, this app uses Goquery (see go.mod file) and the net/html package. B
 Instead of using Goquery I tried the "golang.org/x/net/html" and its tokenizer. Traversing the DOM tree works similar. 
 
 # Notes
+- This is v1, v2 uses channels
 - Analysed the urls[] with strings but could use regex
 - Atm the fetchResult excludes duplicates
 - What I would change: create a Matcher interface and improve error handling
