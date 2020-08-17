@@ -37,6 +37,7 @@ type Matcher interface {
 type myMatcher struct{}
 
 var matcher myMatcher
+var links []*link
 
 //sort implements the behavior for the matcher
 func (m myMatcher) sort(l *link, baseURL string) (*link, error) {
@@ -129,7 +130,6 @@ func display(fr *fetchResult, ch chan *link) {
 	//idea of Link struct was to persist data and search more convenient with map[int]*link but does not work
 	//now I sort/filter multiple times, which is what I wanted to avoid and is not good at all.
 	length := len(fr.urls)
-	links := []*link{}
 	var haslogin bool
 	for result := range ch {
 		log.Printf("Result:\n url: %s type: %s inaccessible: %t login: %t\n\n", result.url, result.linkType, result.inaccessible, result.login)
@@ -229,7 +229,7 @@ func getURLs(doc *goquery.Document) []string {
 	return foundUrls
 }
 
-//Contains returns true if slice already contains url
+//contains returns true if slice already contains url
 func contains(urls []string, url string) bool {
 	for _, v := range urls {
 		if v == url {
