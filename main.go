@@ -84,7 +84,7 @@ func sortLinks(fresult []string, inputURL string) *sortResult {
 	r.internals = len(internals)
 	fmt.Printf("found %d internal links and %d\n", r.internals, len(fresult)-r.internals)
 
-	//check if link is inaccessible //change Get(input) like in v2
+	//check if link is inaccessible //change Get(input) like in 2
 	pingLink := func(link string) bool {
 		_, err := http.Get(link)
 		if err != nil {

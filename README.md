@@ -23,11 +23,12 @@ go test
 # Requirements
 This app requires Go1.1+ 
 In addition, this app uses Goquery (see go.mod file) and the net/html package. Both require UTF-8 encoding. 
-Instead of using Goquery I tried the "golang.org/x/net/html" and its tokenizer. Traversing the DOM tree works similar. 
+Instead of using Goquery I tried the "golang.org/x/net/html" and its tokenizer but Goquery seemed more like a real work project. Traversing the DOM tree works similar.
 
 # Notes
-- This is v1, v2 uses channels
+- This is v1, v2 uses channels because this is slow
 - Analysed the urls[] with strings but could use regex
-- Atm the fetchResult excludes duplicates
-- What I would change: create a Matcher interface and improve error handling
-- slow
+- The fetchResult excludes duplicates which may not be required
+- I use a Matcher Interface since we talked about it, although it's probably unnecessary here. See v1 for simpler sorting
+- What I would change: create Matcher interface, improve error handling, better testing
+- use channels for sort result
