@@ -27,6 +27,6 @@ Instead of using Goquery I tried the "golang.org/x/net/html" and its tokenizer b
 
 # Notes
 - The fetchResult excludes duplicates which may not be required
-- I use a Matcher Interface since we talked, it's probably unnecessary here. See v1 for simpler sorting
+- I use a Matcher Interface since we talked about it, although it's probably unnecessary here. See v1 for simpler sorting
 - What I would change: improve error handling, better testing
 - use channels for sort result
